@@ -22,14 +22,14 @@ impl LR35902 {
                         b: 0, c: 0, 
                         d: 0, e: 0,
                         h: 0, l: 0,
-                        sp: 0, pc: 0x100,
+                        sp: 0xFFFE, pc: 0x100,
                         ram: [0;0xFFFF+1]
                     };
     }
-
-    fn get_BC(&mut self) -> u16 {
-        return (self.b as u16) << 8 + self.c;
-    }
+                                                     
+    fn get_BC(&mut self) -> u16 {                                                    
+        return (self.b as u16) << 8 + self.c;                                                    
+    }                                                    
 
     fn get_DE(&mut self) -> u16 {
         return (self.d as u16) << 8 + self.e;
@@ -37,26 +37,60 @@ impl LR35902 {
     fn get_HL(&mut self) -> u16 {
         return (self.h as u16) << 8 + self.l;
     }
+
+    fn set_BC(&mut self,value:u16){
+        self.b = (value>>8) as u8;
+        self.c = value as u8
+    }
+
+    fn set_DE(&mut self,value:u16){
+        self.d = (value>>8) as u8;
+        self.e = value as u8
+    }
+    fn set_HL(&mut self,value:u16){
+        self.h = (value>>8) as u8;
+        self.l = value as u8
+    }
+
     fn get_next_byte(&mut self) -> u8 {
         return self.ram[(self.pc + 1) as usize];
+    }
+
+    fn get_next_two_bytes(&mut self) -> u16 {
+        return self.ram[(self.pc + 1) as usize] as u16 | (self.ram[(self.pc + 2) as usize]<<8) as u16
+    }
+
+    fn dec_HL(&mut self) {
+        let tmp = self.get_HL() - 1;
+        self.h = (tmp>>8) as u8;
+        self.h = tmp as u8;
+    }
+
+    fn inc_HL(&mut self) {
+        let tmp = self.get_HL() + 1;
+        self.h = (tmp>>8) as u8;
+        self.h = tmp as u8;
+
     }
     
     fn execute(&mut self) {
         let opcode = self.ram[self.pc as usize];
+        let next_byte = self.get_next_byte();
+        let next_two_bytes = self.get_next_two_bytes();
 
         match opcode {
             0x00=>{
                 //NOP
             }
 
+            //LD 8 bits Loads
             //LD nn,n
-            0x06=> {self.b = self.get_next_byte()} //LD B,n
-            0x0E=> {self.c = self.get_next_byte()} //LD C,n
-            0x16=> {self.d = self.get_next_byte()} //LD D,n
-            0x1E=> {self.e = self.get_next_byte()} //LD E,n
-            0x26=> {self.h = self.get_next_byte()} //LD H,n
-            0x2E=> {self.l = self.get_next_byte()} //LD L,n
-
+            0x06=> {self.b = next_byte} //LD B,n
+            0x0E=> {self.c = next_byte} //LD C,n
+            0x16=> {self.d = next_byte} //LD D,n
+            0x1E=> {self.e = next_byte} //LD E,n
+            0x26=> {self.h = next_byte} //LD H,n
+            0x2E=> {self.l = next_byte} //LD L,n
             //LD r1,r2
             //LD A,r                                                       //LD B,r
             0x7F=>{self.a = self.a}/*LD A,A */ 
@@ -90,22 +124,50 @@ impl LR35902 {
             0x6B=>{self.l = self.e}/*LD L,E */                             0x73=>{self.c = self.e} //LD (HL),E 8
             0x6C=>{self.l = self.h}/*LD L,H */                             0x74=>{self.c = self.h} //LD (HL),H 8
             0x6D=>{self.l = self.l}/*LD L,L */                             0x75=>{self.c = self.l} //LD (HL),L 8
-            0x6E=>{self.l = self.ram[self.get_HL() as usize]}/*LD L,(HL)*/ 0x36=>{self.ram[self.get_HL() as usize] = self.get_next_byte()} //LD (HL),n 12
+            0x6E=>{self.l = self.ram[self.get_HL() as usize]}/*LD L,(HL)*/ 0x36=>{self.ram[self.get_HL() as usize] = next_byte} //LD (HL),n 12
+            //LD r,A                
+            0x7F=>{self.a = self.a}/*LD A,A*/                              0xF2=>{self.a = self.ram[(0xFF00 + self.c as u16) as usize]}//LD A,(C)      
+            0x47=>{self.b = self.a}/*LD B,A*/                              0xE2=>{self.ram[(0xFF00 + self.c as u16) as usize] = self.a}//LD (C),A               
+            0x4F=>{self.c = self.a}/*LD C,A*/                                       
+            0x57=>{self.d = self.a}/*LD D,A*/                              0x3A=>{self.a = self.ram[self.get_HL() as usize];self.dec_HL()}//LD A,(HL-)              
+            0x5F=>{self.e = self.a}/*LD E,A*/                              0x32=>{self.ram[self.get_HL() as usize] = self.a;self.dec_HL()}//LD (HLD),A               
+            0x67=>{self.h = self.a}/*LD H,A*/                              0x2A=>{self.a = self.ram[self.get_HL() as usize];self.inc_HL()}//LD A,(HL-)               
+            0x6F=>{self.l = self.a}/*LD L,A*/                              0x22=>{self.ram[self.get_HL() as usize] = self.a;self.inc_HL()}//LD (HLD),A            
+            0x02=>{self.ram[self.get_BC() as usize] = self.a}/*LD (BC),A*/ 
+            0x12=>{self.ram[self.get_DE() as usize] = self.a}/*LD (DE),A*/ 0xE0=>{self.ram[(0xFF00 + next_byte as u16) as usize] = self.a}//LD (n),A
+            0x77=>{self.ram[self.get_HL() as usize] = self.a}/*LD (HL),A*/ 0xF0=>{self.a = self.ram[(0xFF00 + next_byte as u16) as usize]}//LD A,(n)
+            0xEA=>{self.ram[next_two_bytes as usize]= self.a}//LD (nn),A
+            0x3E=>{}//LD #,A ??
 
-            //LD r,A
-            0x7F=>{self.a = self.a}//LD A,A
-            0x47=>{self.b = self.a}//LD B,A
-            0x4F=>{self.c = self.a}//LD C,A
-            0x57=>{self.d = self.a}//LD D,A
-            0x5F=>{self.e = self.a}//LD E,A
-            0x67=>{self.h = self.a}//LD H,A
-            0x6F=>{self.l = self.a}//LD L,A
-            0x02=>{self.ram[self.get_BC() as usize] = self.a}//LD (BC),A
-            0x12=>{self.ram[self.get_DE() as usize] = self.a}//LD (DE),A
-            0x77=>{self.ram[self.get_HL() as usize] = self.a}//LD (HL),A
-            0xEA=>{}//LD (nn),A
+
+            //LD 16 bits Loads
+            //LD n,nn
+            0x01=>{self.set_BC(next_two_bytes)}//LD BC,nn 
+            0x11=>{self.set_DE(next_two_bytes)}//LD DE,nn 
+            0x21=>{self.set_HL(next_two_bytes)}//LD HL,nn 
+            0x31=>{self.sp  =  next_two_bytes }//LD SP,nn 
+
+            0xF9=>{self.sp = self.get_HL()}//LD SP,HL 
+            0xF8=>{todo!()}// LDHL SP,n
+            0x08=>{self.ram[next_two_bytes as usize] = self.pc as u8;
+                   self.ram[(next_two_bytes+1) as usize] = (self.pc<<8) as u8}//LD (nn),SP
+            
+            //PUSH nn
+            0xF5=>{self.ram[(self.pc - 1) as usize] = self.a;  self.ram[(self.pc - 2) as usize] = self.f;  self.pc = self.pc - 2}//PUSH AF 
+            0xC5=>{self.ram[(self.pc - 1) as usize] = self.b;  self.ram[(self.pc - 2) as usize] = self.c;  self.pc = self.pc - 2}//PUSH BC 
+            0xD5=>{self.ram[(self.pc - 1) as usize] = self.d;  self.ram[(self.pc - 2) as usize] = self.e;  self.pc = self.pc - 2}//PUSH DE 
+            0xE5=>{self.ram[(self.pc - 1) as usize] = self.h;  self.ram[(self.pc - 2) as usize] = self.l;  self.pc = self.pc - 2}//PUSH HL 
+            
+            //POP nn
+            0xF1=>{self.f = self.ram[self.pc as usize];   self.a = self.ram[(self.pc + 1) as usize];  self.pc = self.pc + 2}//POP AF 
+            0xC1=>{self.c = self.ram[self.pc as usize];   self.b = self.ram[(self.pc + 1) as usize];  self.pc = self.pc + 2}//POP BC 
+            0xD1=>{self.e = self.ram[self.pc as usize];   self.d = self.ram[(self.pc + 1) as usize];  self.pc = self.pc + 2}//POP DE 
+            0xE1=>{self.l = self.ram[self.pc as usize];   self.h = self.ram[(self.pc + 1) as usize];  self.pc = self.pc + 2}//POP HL 
 
 
+
+            //8bits ALU
+            
             _=>{println!("Unknow opcode")}
         }
     }
