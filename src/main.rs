@@ -1,7 +1,16 @@
+
 fn main() {
 
     let CPU = LR35902::init();
 
+}
+
+enum FLAG {
+    Zero,
+    NSub,
+    HalfCarry,
+    Carry,
+    All
 }
 
 struct LR35902 {
@@ -57,7 +66,7 @@ impl LR35902 {
     }
 
     fn get_next_two_bytes(&mut self) -> u16 {
-        return self.ram[(self.pc + 1) as usize] as u16 | (self.ram[(self.pc + 2) as usize]<<8) as u16
+        return self.ram[(self.pc + 1) as usize] as u16 | (self.ram[(self.pc + 2) as usize] as u16)<<8
     }
 
     fn dec_HL(&mut self) {
@@ -71,6 +80,62 @@ impl LR35902 {
         self.h = (tmp>>8) as u8;
         self.h = tmp as u8;
 
+    }
+    fn up_flag(&mut self,flag:FLAG) {
+        match flag {
+            FLAG::Zero=>{self.f |= 0b1000_0000}
+            FLAG::NSub=>{self.f |= 0b0100_0000}
+            FLAG::HalfCarry=>{self.f |= 0b0010_0000}
+            FLAG::Carry=>{self.f |= 0b0001_0000}
+            FLAG::All=>{self.f = 0b1111_0000}
+            _=>{}
+        }
+    }
+
+    fn down_flag(&mut self,flag:FLAG) {
+        match flag {
+            FLAG::Zero=>{self.f &= 0b0111_0000}
+            FLAG::NSub=>{self.f &= 0b1011_0000}
+            FLAG::HalfCarry=>{self.f &= 0b1101_0000}
+            FLAG::Carry=>{self.f &= 0b1110_0000}
+            FLAG::All=>{self.f = 0b000_0000}
+            _=>{}
+        }
+    }
+
+    fn get_flag(&mut self,flag:FLAG) -> bool {
+        match flag {
+            FLAG::Zero=>{return self.f & 0b1000_0000 > 0}
+            FLAG::NSub=>{return self.f & 0b0100_0000 > 0}
+            FLAG::HalfCarry=>{return self.f & 0b0010_0000 > 0}
+            FLAG::Carry=>{return self.f & 0b0001_0000 > 0}
+            FLAG::All=>{return self.f & 0b1111_0000 > 0}
+            _=>{return false;}
+        }
+    }
+
+    
+
+    fn add(&mut self,value:u8){
+        let res = self.a as u16 + value as u16;
+        self.a = res as u8;
+        self.down_flag(FLAG::NSub);
+        if res == 0 {self.up_flag(FLAG::Zero)}
+        if ((self.a & 0x0F) + (value & 0x0F) & 0xF0 ) > 0 {self.up_flag(FLAG::HalfCarry)} //yea thats how i see it 
+        if res & 0xFF00 > 0 {self.up_flag(FLAG::Carry)}
+    }
+
+    fn adc(&mut self,value:u8){
+        let mut carry:u16 = 0;
+        if self.get_flag(FLAG::Carry) {
+            carry = 1;
+        }
+        let res = self.a as u16 + value as u16 + carry;
+        self.a = res as u8;
+        self.down_flag(FLAG::NSub);
+        if res == 0 {self.up_flag(FLAG::Zero)}
+        if ((self.a & 0x0F) + (value & 0x0F) & 0xF0 ) > 0 {self.up_flag(FLAG::HalfCarry)} //yea thats how i see it 
+        if res & 0xFF00 > 0 {self.up_flag(FLAG::Carry)}
     }
     
     fn execute(&mut self) {
@@ -167,7 +232,26 @@ impl LR35902 {
 
 
             //8bits ALU
+            //ADD A,n                                        //ADC A,n
+            0x87=>{self.add(self.a)}/*ADD A,A */             0x8F=>{self.adc(self.a)}//ADC A,A 
+            0x80=>{self.add(self.b)}/*ADD A,B */             0x88=>{self.adc(self.b)}//ADC A,B 
+            0x81=>{self.add(self.c)}/*ADD A,C */             0x89=>{self.adc(self.c)}//ADC A,C 
+            0x82=>{self.add(self.d)}/*ADD A,D */             0x8A=>{self.adc(self.d)}//ADC A,D 
+            0x83=>{self.add(self.e)}/*ADD A,E */             0x8B=>{self.adc(self.e)}//ADC A,E 
+            0x84=>{self.add(self.h)}/*ADD A,H */             0x8C=>{self.adc(self.h)}//ADC A,H 
+            0x85=>{self.add(self.l)}/*ADD A,L */             0x8D=>{self.adc(self.l)}//ADC A,L 
+            0x86=>{
+                let x = self.get_HL() as usize;
+                self.add(self.ram[x])}
+                /*ADD A,(HL)*/ 0x8E=>{
+                    let x = self.get_HL() as usize;
+                    self.adc(self.ram[x])
+                }//ADC A,(HL)
+            0xC6=>{self.add(next_byte)}/*ADD A,#*/           0xCE=>{self.adc(next_byte)}//ADC A,#
+
+        
             
+    
             _=>{println!("Unknow opcode")}
         }
     }
