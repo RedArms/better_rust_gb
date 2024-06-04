@@ -303,7 +303,9 @@ impl LR35902 {
             0xAD=>{self.xor(self.l)}/*XOR L*/
             0xAE=>{self.xor(fetch_ram_HL)}/*XOR (HL)*/
             0xEE=>{self.xor(next_byte)}/*XOR #*/
+            //CP
 
+            
             _=>{println!("Unknow opcode")}
         }
     }
