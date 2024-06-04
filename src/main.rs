@@ -114,12 +114,15 @@ impl LR35902 {
         }
     }
 
-    
+    fn fetch_ram_HL(&mut self) -> u8 {
+        return self.ram[self.get_HL() as usize];
+    }
 
     fn add(&mut self,value:u8){
         let res = self.a as u16 + value as u16;
         self.a = res as u8;
         self.down_flag(FLAG::NSub);
+        self.down_flag(FLAG::Zero);
         if res == 0 {self.up_flag(FLAG::Zero)}
         if ((self.a & 0x0F) + (value & 0x0F) & 0xF0 ) > 0 {self.up_flag(FLAG::HalfCarry)} //yea thats how i see it 
         if res & 0xFF00 > 0 {self.up_flag(FLAG::Carry)}
@@ -133,15 +136,44 @@ impl LR35902 {
         let res = self.a as u16 + value as u16 + carry;
         self.a = res as u8;
         self.down_flag(FLAG::NSub);
+        self.down_flag(FLAG::Zero);
         if res == 0 {self.up_flag(FLAG::Zero)}
         if ((self.a & 0x0F) + (value & 0x0F) & 0xF0 ) > 0 {self.up_flag(FLAG::HalfCarry)} //yea thats how i see it 
         if res & 0xFF00 > 0 {self.up_flag(FLAG::Carry)}
+    }
+
+    //sub
+    //subc
+
+    fn and(&mut self,value:u8){
+        self.a = self.a & value;
+        self.down_flag(FLAG::NSub);
+        self.down_flag(FLAG::Carry);
+        self.up_flag(FLAG::HalfCarry);
+        if self.a == 0 {self.up_flag(FLAG::Zero)}
+    }
+
+    fn or(&mut self,value:u8){
+        self.a = self.a | value;
+        self.down_flag(FLAG::NSub);
+        self.down_flag(FLAG::Carry);
+        self.down_flag(FLAG::HalfCarry);
+        if self.a == 0 {self.up_flag(FLAG::Zero)}
+    }
+
+    fn xor(&mut self,value:u8){
+        self.a = self.a ^ value;
+        self.down_flag(FLAG::NSub);
+        self.down_flag(FLAG::Carry);
+        self.down_flag(FLAG::HalfCarry);
+        if self.a == 0 {self.up_flag(FLAG::Zero)}
     }
     
     fn execute(&mut self) {
         let opcode = self.ram[self.pc as usize];
         let next_byte = self.get_next_byte();
         let next_two_bytes = self.get_next_two_bytes();
+        let fetch_ram_HL = self.fetch_ram_HL();
 
         match opcode {
             0x00=>{
@@ -157,47 +189,51 @@ impl LR35902 {
             0x26=> {self.h = next_byte} //LD H,n
             0x2E=> {self.l = next_byte} //LD L,n
             //LD r1,r2
-            //LD A,r                                                       //LD B,r
-            0x7F=>{self.a = self.a}/*LD A,A */ 
-            0x78=>{self.a = self.b}/*LD A,B */                             0x40=>{self.b = self.b}//LD B,B
-            0x79=>{self.a = self.c}/*LD A,C */                             0x41=>{self.b = self.c}//LD B,C
-            0x7A=>{self.a = self.d}/*LD A,D */                             0x42=>{self.b = self.d}//LD B,D
-            0x7B=>{self.a = self.e}/*LD A,E */                             0x43=>{self.b = self.e}//LD B,E
-            0x7C=>{self.a = self.h}/*LD A,H */                             0x44=>{self.b = self.h}//LD B,H
-            0x7D=>{self.a = self.l}/*LD A,L */                             0x45=>{self.b = self.l}//LD B,L
-            0x7E=>{self.a = self.ram[self.get_HL() as usize]}/*LD A,(HL)*/ 0x46=>{self.b = self.ram[self.get_HL() as usize]}//LD B,(HL)
-            //LD C,r                                                       //LD D,r
-            0x48=>{self.c = self.b}/*LD C,B */                             0x50=>{self.d = self.b}//LD D,B  4
-            0x49=>{self.c = self.c}/*LD C,C */                             0x51=>{self.d = self.c}//LD D,C  4
-            0x4A=>{self.c = self.d}/*LD C,D */                             0x52=>{self.d = self.d}//LD D,D  4
-            0x4B=>{self.c = self.e}/*LD C,E */                             0x53=>{self.d = self.e}//LD D,E  4
-            0x4C=>{self.c = self.h}/*LD C,H */                             0x54=>{self.d = self.h}//LD D,H  4
-            0x4D=>{self.c = self.l}/*LD C,L */                             0x55=>{self.d = self.l}//LD D,L  4
-            0x4E=>{self.c = self.ram[self.get_HL() as usize]}/*LD C,(HL)*/ 0x56=>{self.d = self.ram[self.get_HL() as usize]}//LD D,(HL) 56 8  
-            //LD E,r                                                       //LD H,r
-            0x58=>{self.e = self.b}/*LD E,B */                             0x60=>{self.h = self.b} //LD H,B
-            0x59=>{self.e = self.c}/*LD E,C */                             0x61=>{self.h = self.c} //LD H,C
-            0x5A=>{self.e = self.d}/*LD E,D */                             0x62=>{self.h = self.d} //LD H,D
-            0x5B=>{self.e = self.e}/*LD E,E */                             0x63=>{self.h = self.e} //LD H,E
-            0x5C=>{self.e = self.h}/*LD E,H */                             0x64=>{self.h = self.h} //LD H,H
-            0x5D=>{self.e = self.l}/*LD E,L */                             0x65=>{self.h = self.l} //LD H,L
-            0x5E=>{self.e= self.ram[self.get_HL() as usize]}/*LD E,(HL)*/  0x66=>{self.h = self.ram[self.get_HL() as usize]}//LD H,(HL) 66 8  
-            //LD L,r                                                       //LD (HL),r
-            0x68=>{self.l = self.b}/*LD L,B */                             0x70=>{self.c = self.b} //LD (HL),B 8
-            0x69=>{self.l = self.c}/*LD L,C */                             0x71=>{self.c = self.c} //LD (HL),C 8
-            0x6A=>{self.l = self.d}/*LD L,D */                             0x72=>{self.c = self.d} //LD (HL),D 8
-            0x6B=>{self.l = self.e}/*LD L,E */                             0x73=>{self.c = self.e} //LD (HL),E 8
-            0x6C=>{self.l = self.h}/*LD L,H */                             0x74=>{self.c = self.h} //LD (HL),H 8
-            0x6D=>{self.l = self.l}/*LD L,L */                             0x75=>{self.c = self.l} //LD (HL),L 8
-            0x6E=>{self.l = self.ram[self.get_HL() as usize]}/*LD L,(HL)*/ 0x36=>{self.ram[self.get_HL() as usize] = next_byte} //LD (HL),n 12
+            //LD A,r                                                       
+            0x7F=>{self.a = self.a}/*LD A,A */          //LD B,r
+            0x78=>{self.a = self.b}/*LD A,B */          0x40=>{self.b = self.b}//LD B,B
+            0x79=>{self.a = self.c}/*LD A,C */          0x41=>{self.b = self.c}//LD B,C
+            0x7A=>{self.a = self.d}/*LD A,D */          0x42=>{self.b = self.d}//LD B,D
+            0x7B=>{self.a = self.e}/*LD A,E */          0x43=>{self.b = self.e}//LD B,E
+            0x7C=>{self.a = self.h}/*LD A,H */          0x44=>{self.b = self.h}//LD B,H
+            0x7D=>{self.a = self.l}/*LD A,L */          0x45=>{self.b = self.l}//LD B,L
+            0x7E=>{self.a = fetch_ram_HL}/*LD A,(HL)*/  0x46=>{self.b = fetch_ram_HL}//LD B,(HL)
+            //LD C,r                                    //LD D,r
+            0x48=>{self.c = self.b}/*LD C,B */          0x50=>{self.d = self.b}//LD D,B  4
+            0x49=>{self.c = self.c}/*LD C,C */          0x51=>{self.d = self.c}//LD D,C  4
+            0x4A=>{self.c = self.d}/*LD C,D */          0x52=>{self.d = self.d}//LD D,D  4
+            0x4B=>{self.c = self.e}/*LD C,E */          0x53=>{self.d = self.e}//LD D,E  4
+            0x4C=>{self.c = self.h}/*LD C,H */          0x54=>{self.d = self.h}//LD D,H  4
+            0x4D=>{self.c = self.l}/*LD C,L */          0x55=>{self.d = self.l}//LD D,L  4
+            0x4E=>{self.c = fetch_ram_HL}/*LD C,(HL)*/  0x56=>{self.d = fetch_ram_HL}//LD D,(HL) 56 8  
+            //LD E,r                                    //LD H,r
+            0x58=>{self.e = self.b}/*LD E,B */          0x60=>{self.h = self.b} //LD H,B
+            0x59=>{self.e = self.c}/*LD E,C */          0x61=>{self.h = self.c} //LD H,C
+            0x5A=>{self.e = self.d}/*LD E,D */          0x62=>{self.h = self.d} //LD H,D
+            0x5B=>{self.e = self.e}/*LD E,E */          0x63=>{self.h = self.e} //LD H,E
+            0x5C=>{self.e = self.h}/*LD E,H */          0x64=>{self.h = self.h} //LD H,H
+            0x5D=>{self.e = self.l}/*LD E,L */          0x65=>{self.h = self.l} //LD H,L
+            0x5E=>{self.e = fetch_ram_HL}/*LD E,(HL)*/  0x66=>{self.h = fetch_ram_HL}//LD H,(HL) 66 8  
+
+            //LD L,r                                    //LD (HL),r
+            0x68=>{self.l = self.b}/*LD L,B */          0x70=>{self.ram[self.get_HL() as usize] = self.b} //LD (HL),B
+            0x69=>{self.l = self.c}/*LD L,C */          0x71=>{self.ram[self.get_HL() as usize] = self.c} //LD (HL),C
+            0x6A=>{self.l = self.d}/*LD L,D */          0x72=>{self.ram[self.get_HL() as usize] = self.d} //LD (HL),D
+            0x6B=>{self.l = self.e}/*LD L,E */          0x73=>{self.ram[self.get_HL() as usize] = self.e} //LD (HL),E
+            0x6C=>{self.l = self.h}/*LD L,H */          0x74=>{self.ram[self.get_HL() as usize] = self.h} //LD (HL),H
+            0x6D=>{self.l = self.l}/*LD L,L */          0x75=>{self.ram[self.get_HL() as usize] = self.l} //LD (HL),L
+            0x6E=>{self.l = fetch_ram_HL}/*LD L,(HL)*/  0x36=>{self.ram[self.get_HL() as usize] = next_byte} //LD (HL),n 12
+            
             //LD r,A                
-            0x7F=>{self.a = self.a}/*LD A,A*/                              0xF2=>{self.a = self.ram[(0xFF00 + self.c as u16) as usize]}//LD A,(C)      
-            0x47=>{self.b = self.a}/*LD B,A*/                              0xE2=>{self.ram[(0xFF00 + self.c as u16) as usize] = self.a}//LD (C),A               
-            0x4F=>{self.c = self.a}/*LD C,A*/                                       
-            0x57=>{self.d = self.a}/*LD D,A*/                              0x3A=>{self.a = self.ram[self.get_HL() as usize];self.dec_HL()}//LD A,(HL-)              
-            0x5F=>{self.e = self.a}/*LD E,A*/                              0x32=>{self.ram[self.get_HL() as usize] = self.a;self.dec_HL()}//LD (HLD),A               
-            0x67=>{self.h = self.a}/*LD H,A*/                              0x2A=>{self.a = self.ram[self.get_HL() as usize];self.inc_HL()}//LD A,(HL-)               
-            0x6F=>{self.l = self.a}/*LD L,A*/                              0x22=>{self.ram[self.get_HL() as usize] = self.a;self.inc_HL()}//LD (HLD),A            
+            0x7F=>{self.a = self.a}/*LD A,A*/           0xF2=>{self.a = self.ram[(0xFF00 + self.c as u16) as usize]}//LD A,(C)      
+            0x47=>{self.b = self.a}/*LD B,A*/           0xE2=>{self.ram[(0xFF00 + self.c as u16) as usize] = self.a}//LD (C),A               
+            0x4F=>{self.c = self.a}/*LD C,A*/                    
+            0x57=>{self.d = self.a}/*LD D,A*/           0x3A=>{self.a = fetch_ram_HL;self.dec_HL()}//LD A,(HL-)              
+            0x5F=>{self.e = self.a}/*LD E,A*/           0x32=>{self.ram[self.get_HL() as usize] = self.a;self.dec_HL()}//LD (HLD),A               
+            0x67=>{self.h = self.a}/*LD H,A*/           0x2A=>{self.a = fetch_ram_HL;self.inc_HL()}//LD A,(HL-)               
+            0x6F=>{self.l = self.a}/*LD L,A*/           0x22=>{self.ram[self.get_HL() as usize] = self.a;self.inc_HL()}//LD (HLD),A            
+            
+            
             0x02=>{self.ram[self.get_BC() as usize] = self.a}/*LD (BC),A*/ 
             0x12=>{self.ram[self.get_DE() as usize] = self.a}/*LD (DE),A*/ 0xE0=>{self.ram[(0xFF00 + next_byte as u16) as usize] = self.a}//LD (n),A
             0x77=>{self.ram[self.get_HL() as usize] = self.a}/*LD (HL),A*/ 0xF0=>{self.a = self.ram[(0xFF00 + next_byte as u16) as usize]}//LD A,(n)
@@ -240,18 +276,34 @@ impl LR35902 {
             0x83=>{self.add(self.e)}/*ADD A,E */             0x8B=>{self.adc(self.e)}//ADC A,E 
             0x84=>{self.add(self.h)}/*ADD A,H */             0x8C=>{self.adc(self.h)}//ADC A,H 
             0x85=>{self.add(self.l)}/*ADD A,L */             0x8D=>{self.adc(self.l)}//ADC A,L 
-            0x86=>{
-                let x = self.get_HL() as usize;
-                self.add(self.ram[x])}
-                /*ADD A,(HL)*/ 0x8E=>{
-                    let x = self.get_HL() as usize;
-                    self.adc(self.ram[x])
-                }//ADC A,(HL)
+            0x86=>{self.add(fetch_ram_HL)}/*ADD A,(HL)*/     0x8E=>{self.adc(fetch_ram_HL)}//ADC A,(HL)
             0xC6=>{self.add(next_byte)}/*ADD A,#*/           0xCE=>{self.adc(next_byte)}//ADC A,#
 
-        
+            //SUB
+            //SBC
             
-    
+            //AND                                                    //OR
+            0xA7=>{self.and(self.a)}/*AND A*/                        0xB7=>{self.or(self.a)}/*OR A*/
+            0xA0=>{self.and(self.b)}/*AND B*/                        0xB0=>{self.or(self.b)}/*OR B*/
+            0xA1=>{self.and(self.c)}/*AND C*/                        0xB1=>{self.or(self.c)}/*OR C*/
+            0xA2=>{self.and(self.d)}/*AND D*/                        0xB2=>{self.or(self.d)}/*OR D*/
+            0xA3=>{self.and(self.e)}/*AND E*/                        0xB3=>{self.or(self.e)}/*OR E*/
+            0xA4=>{self.and(self.h)}/*AND H*/                        0xB4=>{self.or(self.h)}/*OR H*/
+            0xA5=>{self.and(self.l)}/*AND L*/                        0xB5=>{self.or(self.l)}/*OR L*/
+            0xA6=>{self.and(fetch_ram_HL)}/*AND (HL) A6*/            0xB6=>{self.or(fetch_ram_HL)}/*OR (HL)*/
+            0xE6=>{self.and(next_byte)}/*AND # E6*/                  0xF6=>{self.or(next_byte)}/*OR #*/
+
+            //XOR
+            0xAF=>{self.xor(self.a)}/*XOR A*/
+            0xA8=>{self.xor(self.b)}/*XOR B*/
+            0xA9=>{self.xor(self.c)}/*XOR C*/
+            0xAA=>{self.xor(self.d)}/*XOR D*/
+            0xAB=>{self.xor(self.e)}/*XOR E*/
+            0xAC=>{self.xor(self.h)}/*XOR H*/
+            0xAD=>{self.xor(self.l)}/*XOR L*/
+            0xAE=>{self.xor(fetch_ram_HL)}/*XOR (HL)*/
+            0xEE=>{self.xor(next_byte)}/*XOR #*/
+
             _=>{println!("Unknow opcode")}
         }
     }
